@@ -1,0 +1,701 @@
+---
+title: "Neema_Muroki.rmd"
+author: "Neema Muroki"
+date: "2025-04-24"
+output:
+  pdf_document:
+    latex_engine: xelatex
+encoding: UTF-8
+---
+
+*Data science task*
+*Question one*
+#Libraries 
+
+```{r}
+library(tidyverse)
+library(ggcorrplot)
+library(ggplot2)
+library(lmerTest)
+library(readxl)
+library(dplyr);
+library(scales)
+library(car);
+library(lme4);
+```
+
+#HIV data set
+```{r}
+#let's load our database 
+hiv_data <- read.csv("C:/Users/HP/Documents/R_projects/CEMA/HIV data 2000-2023.csv")
+head(hiv_data)
+```
+
+Let's get cleaning 
+# Cleaning the HIV dataset
+keeping only the relevant data
+
+```{r}
+hiv_clean <- hiv_data %>%
+  filter(Indicator == "Estimated number of people (all ages) living with HIV") %>%
+  select(
+    country_code = SpatialDimValueCode,  #e.g.,"AGO"
+    country_name = Location,
+    region_code = ParentLocationCode,    # e.g., "AFR"
+    year = Period,
+    value = Value,
+  )
+```
+
+*cleaning the value period*
+**The value column looks like these 320 000 [280 000 - 380 000] lets keep the first digits and have a column 320 000**
+
+```{r}
+hiv_clean <- hiv_clean %>%
+  mutate(
+    value_clean = str_extract(value, "^[0-9, ]+"),
+    hiv_estimate = as.numeric(gsub("[ ,]", "", value_clean))  # Remove commas and spaces
+  ) %>%
+  select(country_code, country_name, region_code, year, hiv_estimate)
+```
+
+# Data Exploration
+
+```{r}
+summary(hiv_clean)
+```
+
+```{r}
+colSums(is.na(hiv_clean))
+```
+*drop the nulls in hiv_estimate*
+```{r}
+hiv_clean <- hiv_clean %>%
+  drop_na(hiv_estimate)
+```
+
+```{r}
+glimpse(hiv_clean)
+```
+*Identify the Countries with the most HIV estimate*
+
+```{r}
+# Calculate the cumulative sum of HIV estimates across all countries
+hiv_by_country <- hiv_clean %>%
+  group_by(country_code) %>%
+  summarize(total_hiv = sum(hiv_estimate, na.rm = TRUE)) %>%
+  arrange(desc(total_hiv))  # Sort in descending order
+
+# Calculate cumulative percentage of HIV burden
+hiv_by_country <- hiv_by_country %>%
+  mutate(cumulative_hiv = cumsum(total_hiv) / sum(total_hiv) * 100)
+
+# Filter countries that contribute to 75% of the global HIV burden
+countries_75 <- hiv_by_country %>%
+  filter(cumulative_hiv <= 75)
+
+# Plot only those
+ggplot(countries_75, aes(x = reorder(country_code, total_hiv), y = total_hiv)) +
+  geom_col(fill = "tomato", color = "black") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis with commas
+  labs(
+    title = "Top 75% Countries with Highest HIV Burden (2000–2023)",
+    x = "Country Code",
+    y = "Total HIV Estimate"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 12),  # Bigger for clarity
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title = element_text(face = "bold")
+  )
+```
+
+The country with that contribute up to 75% of the HIV Burden which are south africa (ZAF) followed by Mozambique (MOZ), Nigeria (NGA) , Kenya (KEN), Tanzania (TZA), Zimbabwe (ZWE),uganda (UGA),Zambia (ZMB), Malawi (MWI), Brazil (BRA),Thailand (THA), Ethopia (ETH), Democratic republic of Kenya(COD), 
+Cote d'Ivoire(CIV)
+
+
+```{r}
+unique(hiv_clean$region_code)
+```
+The number of hiv estimator seems to be increasing over the years.
+
+```{r}
+# Calculate the cumulative sum of HIV estimates across all countries
+hiv_by_country <- hiv_clean %>%
+  group_by(country_code) %>%
+  summarize(total_hiv = sum(hiv_estimate, na.rm = TRUE)) %>%
+  arrange(desc(total_hiv))  # Sort in descending order
+
+# Calculate cumulative percentage of HIV burden
+hiv_by_country <- hiv_by_country %>%
+  mutate(cumulative_hiv = cumsum(total_hiv) / sum(total_hiv) * 100)
+
+# Filter countries that contribute to 75% of the global HIV burden
+countries_75 <- hiv_by_country %>%
+  filter(cumulative_hiv <= 75)
+
+# Filter HIV data to only countries in the 75% burden group
+hiv_75_data <- hiv_clean %>%
+  filter(country_code %in% countries_75$country_code)
+
+# Group by WHO region and year, then summarize HIV estimates
+hiv_75_by_region_year <- hiv_75_data %>%
+  group_by(region_code, year) %>% #renamed the parentlocationcode to region_code
+  summarize(total_hiv_estimate = sum(hiv_estimate, na.rm = TRUE), .groups = "drop")
+
+# Create a single scatter plot with colored regions
+ggplot(hiv_75_by_region_year, aes(x = year, y = total_hiv_estimate, color = region_code)) +
+  geom_point(size = 3) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_color_brewer(palette = "Set1", name = "WHO Region") +  # Or use your preferred color palette
+  labs(
+    title = "HIV Estimates Over Time in 75% Burden Countries",
+    subtitle = "Colored by WHO Region",
+    x = "Year",
+    y = "Total HIV Estimate"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5),
+    axis.title = element_text(face = "bold"),
+    legend.position = "bottom"  # Adjust legend position as needed
+  ) +
+  guides(color = guide_legend(nrow = 2))
+
+```
+Africa seems to have the most HIV estimate as compared to all the three WHO Regions.
+
+
+# Just for thought
+*some little crumbs of knowledge*
+WHO Region Codes Breakdown:
+The WHO divides the world into 6 regions, each with a standardized 3-4 letter code:
+*Code* |*Full Name*	            |*Example Countries*
+AFR	   |African Region	        |Nigeria, South Africa, Kenya
+AMR	   |Region of the Americas	|USA, Brazil, Mexico
+SEAR	 |South-East Asia Region	|India, Indonesia, Thailand
+EUR	   |European Region	        |Germany, France, UK
+EMR	   |Eastern Mediterranean   |Region	Egypt, Pakistan, Saudi Arabia
+WPR	   |Western Pacific Region	|China, Japan, Australia
+
+
+#Poverty dataset from who
+The column "Deprivation rate (share of population)" represents the proportion of people in a given region or economy who are considered deprived according to a specific indicator or set of indicators.
+
+```{r}
+poverty_data <- read_excel("C:/Users/HP/Documents/R_projects/CEMA/multidimensional_poverty_WHO.xlsx")
+head(poverty_data)
+```
+
+#Exploaration of our data 
+
+# Let's clean the table 
+remove unnecesary columns such as "survey year","region","survey name","survey coverage","survey comparability"
+
+```{r}
+poverty_clean <- poverty_data %>%
+  select(
+    country_name = Economy, # country name (e.g., Angola)
+    country_code = 'Country code',      # 3-letter country code (e.g., AGO)
+    year = 'Reporting year',            # year data is reported for
+    multi_poverty = 'Multidimensional poverty headcount ratio (%)',
+    monetary = "Monetary (%)",
+    educational_attainment = "Educational attainment (%)",
+    educational_enrollment = "Educational enrollment (%)" ,
+    electricity = "Electricity (%)",
+    sanitation = "Sanitation (%)" ,
+    drinking_water = "Drinking water (%)"  
+  ) %>%
+ mutate(across(
+    c(multi_poverty, monetary, educational_attainment, educational_enrollment,
+      electricity, sanitation, drinking_water),
+    ~ as.numeric(str_replace(., "-", NA_character_))  # Convert and handle "-"  as nan
+  ))
+```
+
+*check for  nulls in this column*
+```{r}
+colSums(is.na(poverty_clean))
+```
+*let's drop them*
+```{r}
+poverty_clean <- poverty_clean %>%
+  drop_na(educational_attainment,educational_enrollment,electricity,sanitation,drinking_water)
+```
+
+
+```{r}
+colSums(is.na(poverty_clean))
+```
+
+*All cleaned up*
+#Let's merge the two by country and year
+My data doesnot have any nulls and irrelevant data we can now merge
+
+```{r}
+colnames(hiv_clean)
+```
+
+```{r}
+colnames(poverty_clean)
+```
+
+There are a lot if nulls when the data is merged this is probabily due to the differnces in years among the two datasets.
+# look at the years column
+
+```{r}
+unique(hiv_clean$year)
+```
+
+```{r}
+unique(poverty_clean$year)
+```
+
+Both datasets have different years, But they have 2010,2015 and 2022 in common. In order to avoid the multiple nulls and account for both year and country,I will merge on the two years.
+
+
+```{r}
+unique(poverty_clean$country_code)
+```
+
+```{r}
+unique(hiv_clean$country_code) 
+```
+# merged dataset
+An inner join was performed on country_code and year to ensure only matching records with complete information from both datasets were included in the merged data.
+
+
+```{r}
+# Filter for matched years only
+hiv_subset <- hiv_clean %>% filter(year %in% c(2010, 2015,2022))
+poverty_subset <- poverty_clean %>% filter(year %in% c(2010, 2015,2022))
+
+# Merge by country and year
+Hiv_poverty <- inner_join(hiv_subset, poverty_subset, by = c("country_code", "year"))
+
+```
+
+
+```{r}
+glimpse(Hiv_poverty)
+```
+
+*Perfect no nulls at all*
+```{r}
+colSums(is.na(Hiv_poverty))
+```
+
+The unique countries and years in my merged data
+```{r}
+unique(Hiv_poverty$country_name.x)
+table(Hiv_poverty$year)
+```
+# Build a model 
+
+Due to the limited number of observations per country and year, random effects could not be estimated reliably. A linear model was used to analyze the relationship between HIV prevalence and poverty-related indicators.
+
+```{r}
+hiv_model <- lm(
+  hiv_estimate ~ multi_poverty + educational_attainment +
+    educational_enrollment + electricity + sanitation + drinking_water,
+    data = Hiv_poverty
+)
+summary(hiv_model)
+```
+
+
+
+```{r}
+colnames(Hiv_poverty)
+```
+#let us try a full join
+
+```{r}
+# Merge hiv and poverty by country and year
+Hiv_poverty_merge <- full_join(hiv_clean, poverty_clean, by = c("country_code", "year"))
+```
+
+```{r}
+# Merge hiv and poverty by country and year
+glimpse(Hiv_poverty_merge)
+```
+
+```{r}
+# Check the first few rows to inspect the data
+head(Hiv_poverty_merge)
+```
+
+
+
+```{r}
+# Fill missing country_name.y with country_name.x values
+Hiv_poverty_merge$country_name.y <- ifelse(is.na(Hiv_poverty_merge$country_name.y), Hiv_poverty_merge$country_name.x, Hiv_poverty_merge$country_name.y)
+
+# Check the result
+head(Hiv_poverty_merge)
+
+```
+
+
+```{r}
+#  Fill missing numeric values with the mean of the respective columns
+numeric_cols <- sapply(Hiv_poverty_merge, is.numeric)  # Identify numeric columns
+Hiv_poverty_merge[numeric_cols] <- lapply(Hiv_poverty_merge[numeric_cols], function(x) ifelse(is.na(x), mean(x, na.rm = TRUE), x))
+```
+
+```{r}
+colnames(Hiv_poverty_merge)
+colSums(is.na(Hiv_poverty_merge))
+```
+
+I have sucessfully merged my two datasets and forward filled the NAN's
+
+#Build the model
+
+```{r}
+# Fit a mixed-effects model
+model <- lmer(hiv_estimate ~ multi_poverty + monetary + educational_attainment + 
+              educational_enrollment + electricity + sanitation + drinking_water + 
+              (1 | country_code) + (1 | year), 
+              data = Hiv_poverty_merge)
+
+# Summary of the model
+summary(model)
+```
+
+What does this tell us?
+The most important takeaway from the fixed effects is that sanitation is the only variable that has a statistically significant relationship with HIV estimates. The others, like multi_poverty, monetary, educational_enrollment, and drinking_water, do not appear to be strongly related to the outcome.
+
+The variables with high p-values (such as multi_poverty, monetary, and drinking_water) are not providing much useful information in predicting HIV estimates in this dataset.
+
+#Model diagnosis
+
+Check Residuals:
+
+```{r}
+# Plot residuals
+plot(fitted(model), residuals(model))
+abline(h = 0, col = "red")  # Adding a horizontal line at 0
+```
+
+```{r}
+vif(model)  # Calculate VIF for all predictors
+```
+The above has so much residuals and multicollinearity.
+
+```{r}
+# Log transform the response variable in the correct dataset
+Hiv_poverty_merge$log_hiv_estimate <- log(Hiv_poverty_merge$hiv_estimate)
+
+# Check for non-positive values before transforming (just in case)
+sum(Hiv_poverty_merge$hiv_estimate <= 0)  # Ensure no non-positive values
+```
+
+
+```{r}
+# Fit the model again using the log-transformed response variable
+model_log <- lmer(log_hiv_estimate ~ multi_poverty + monetary + educational_attainment + 
+                  educational_enrollment + electricity + sanitation + drinking_water + 
+                  (1 | country_code) + (1 | year), data = Hiv_poverty_merge)
+
+# Check residuals plot
+plot(fitted(model_log), residuals(model_log))
+abline(h = 0, col = "red")
+
+```
+
+```{r}
+vif(model_log)
+```
+
+Rule of Thumb:
+VIF > 10 = serious multicollinearity.
+VIF > 5 = moderate concern.
+
+The model clearly suffers from multicollinearity, especially:
+multi_poverty and monetary poverty are likely highly correlated, which makes sense (both measure poverty).
+
+
+let's drop the multi_poverty 
+```{r}
+model_drop <- lmer(log_hiv_estimate ~ monetary + educational_attainment + 
+                   educational_enrollment + electricity + sanitation + drinking_water + 
+                   (1 | country_code) + (1 | year), data = Hiv_poverty_merge)
+
+summary(model_drop)
+```
+
+
+
+```{r}
+vif(model_drop)
+```
+
+
+```{r}
+# Check residuals plot
+plot(fitted(model_drop), residuals(model_drop))
+abline(h = 0, col = "red")
+```
+
+Model_drop is much better that all the above models we have taken care :
+- heteroscedasticity addressed via log transformation
+- fixed effects are meaningful and interpretable
+- Random effects are strong (country/year variation)
+- Multicollinearity is controlled
+
+#visualizatation of model
+
+**Predicted vs. Actual Plot**
+```{r}
+
+Hiv_poverty_merge$predicted <- predict(model_drop)
+
+ggplot(Hiv_poverty_merge, aes(x = predicted, y = log_hiv_estimate)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", col = "blue", se = FALSE) +
+  geom_abline(intercept = 0, slope = 1, col = "red", linetype = "dashed") +
+  labs(title = "Predicted vs Actual: Log(HIV Estimate)",
+       x = "Predicted Log(HIV Estimate)",
+       y = "Actual Log(HIV Estimate)") +
+  theme_minimal()
+
+```
+
+The points align well with the red line and my model explains most variation in log(HIV estimates).
+The model is predicting log(HIV Estimate) accurately and consistently. The transformation improved the model. There's no major sign of bias or underfitting/overfitting based on this plot.
+
+
+#Findigs 
+
+🔹 *Summary of Findings*
+A linear mixed model was used to examine how poverty indicators relate to HIV prevalence (log-transformed), with country and year as random effects.
+
+A 1-unit increase in monetary poverty is associated with a 0.028 decrease in log(HIV estimate), meaning higher poverty is linked to lower HIV, possibly due to underreporting in poorer regions.
+
+A 1-unit increase in educational attainment leads to a 0.024 increase in log(HIV estimate), suggesting that higher education levels are linked to more HIV diagnoses.
+
+A 1-unit increase in sanitation access results in a 0.026 decrease in log(HIV estimate), indicating better sanitation is associated with lower HIV prevalence.Which makes a lot of sense because part of the causes of HIV is caused by sanitation issues such as sharing a syringe.
+
+A 1-unit increase in drinking water access causes a 0.033 increase in log(HIV estimate), possibly reflecting urban areas with better infrastructure but higher HIV rates.
+
+Variables like educational enrollment and electricity access were not statistically significant.
+
+The model shows strong predictive performance and controls for differences across countries and years.
+
+
+
+
+
+
+# **Question 2**
+
+Let's load our data sets 
+#Loading the data
+EAC - East Africa Community it's state partners are:
+1.Burundi 
+2.Congo, 
+3.Kenya, 
+4.Rwanda, 
+5.Somalia, 
+6.South Sudan, 
+7.Uganda, 
+8.Tanzania, 
+with its headquarters in Arusha, Tanzania.
+
+
+```{r}
+Neonatal_Underfive_motality<-read.csv("C:/Users/HP/Documents/R_projects/CEMA/dataset_datascience.csv")
+head(Neonatal_Underfive_motality)
+```
+
+```{r}
+glimpse(Neonatal_Underfive_motality)
+```
+
+```{r}
+colSums(is.na(Neonatal_Underfive_motality))
+```
+
+```{r}
+dim(Neonatal_Underfive_motality)
+```
+
+
+
+
+```{r}
+# Convert both to lowercase for case-insensitive matching
+eac_countries <- tolower(c("Burundi", "Kenya", "Rwanda", "South Sudan",
+                           "United Republic of Tanzania", "Uganda", 
+                           "Democratic Republic of the Congo", "Somalia"))
+
+Neonatal_Underfive_motality_cleaned<- Neonatal_Underfive_motality %>%
+  select(
+    ref_area = REF_AREA,               # Rename 'REF_AREA' to 'ref_area'
+    geographic_area = Geographic.area,  # Rename 'Geographic.area' to 'geographic_area'
+    indicator = Indicator,              # Keep 'Indicator' as is
+    year = Series.Year,                 # Rename 'Series.Year' to 'year'
+    observed_value = Observation.Value  # Rename 'Observation.Value' to 'observed_value'
+  ) %>%
+  mutate(
+    observed_value = as.numeric(observed_value),  # Convert 'observed_value' to numeric
+    year = gsub("-.*", "", year),    # take care of years that look like this "1977-1978" 
+    year = as.numeric(year)
+  )
+
+# Filter the data
+eac_data <- Neonatal_Underfive_motality_cleaned %>%
+  filter(tolower(geographic_area) %in% eac_countries)
+
+#read the data
+head(eac_data)
+
+```
+
+```{r}
+
+# Replace "United Republic of Tanzania" with "Tanzania"
+eac_data <- eac_data %>%
+  mutate(
+    geographic_area = ifelse(
+      geographic_area == "United Republic of Tanzania", 
+      "Tanzania", 
+      geographic_area  # Keep other values unchanged
+    )
+  )
+```
+
+
+
+```{r}
+# Check the filtered data 
+unique(eac_data$geographic_area)
+```
+
+
+```{r}
+unique(eac_data$year)
+```
+
+```{r}
+# Separate dataset by indicators
+neonatal_mortality_data <- eac_data %>% filter(indicator == "Neonatal mortality rate")
+under_five_mortality_data <- eac_data %>% filter(indicator == "Under-five mortality rate")
+```
+
+
+The data is cleaned Let's visualize our data on a map
+#shape files 
+
+```{r}
+library(sf)
+```
+
+```{r}
+kenya_shape      <- st_read("C:/Users/HP/Documents/R_projects/CEMA/KEN/gadm41_KEN_0.shp")
+burundi_shape    <- st_read("C:/Users/HP/Documents/R_projects/CEMA/BDI/gadm41_BDI_0.shp")
+congo_shape      <- st_read("C:/Users/HP/Documents/R_projects/CEMA/COD/gadm41_COD_0.shp")
+rwanda_shape     <- st_read("C:/Users/HP/Documents/R_projects/CEMA/RWA/gadm41_RWA_0.shp")
+somalia_shape    <- st_read("C:/Users/HP/Documents/R_projects/CEMA/SOM/gadm41_SOM_0.shp")
+southsudan_shape <- st_read("C:/Users/HP/Documents/R_projects/CEMA/SSD/gadm41_SSD_0.shp")
+tanzania_shape   <- st_read("C:/Users/HP/Documents/R_projects/CEMA/TZA/gadm41_TZA_0.shp")
+uganda_shape     <- st_read("C:/Users/HP/Documents/R_projects/CEMA/UGA/gadm41_UGA_0.shp")
+```
+
+```{r}
+eac_map <- bind_rows(
+  burundi_shape,
+  congo_shape,
+  kenya_shape,
+  rwanda_shape,
+  somalia_shape,
+  southsudan_shape,
+  tanzania_shape,
+  uganda_shape
+)
+```
+
+
+
+```{r}
+# Merge neonatal mortality with the map
+neonatal_map <- eac_map %>%
+  full_join(neonatal_mortality_data, by = c("COUNTRY" = "geographic_area"))
+```
+
+
+```{r}
+ggplot() +
+  geom_sf(data = neonatal_map, aes(fill = (`observed_value`)), color = "black") +
+  scale_fill_viridis_c(option = "plasma", name = "Neonatal Mortality") +
+  labs(title = "🌍 Neonatal Mortality Rate in EAC Countries ") +
+  theme_minimal()
+```
+
+
+```{r}
+# Merge under_five_mortality with the map
+under_five_mortality_map <- eac_map %>%
+  left_join(under_five_mortality_data, by = c("COUNTRY" = "geographic_area"))
+```
+
+
+```{r} 
+ggplot() +
+  geom_sf(data =under_five_mortality_map, aes(fill = (`observed_value`)), color = "black") +
+  scale_fill_viridis_c(option = "plasma", name = "Under_five_mortality") +
+  labs(title = " 🌍 under_five_mortality in EAC Countries") +
+  theme_minimal()
+
+```
+
+
+
+
+# Average trends in the mortality rates over time 
+
+```{r}
+# Plot for under-five mortality rates (with legend)
+ggplot(under_five_mortality_data, aes(x = year, y = observed_value, group = geographic_area, color = geographic_area)) +
+  geom_point() +  # Points for each country
+  geom_line(aes(group = geographic_area), alpha = 0.5) +  # Lines for each country
+  stat_summary(fun = "mean", geom = "line", aes(group = 1), linewidth = 1.5, color = "black") +  # Average trend line
+  labs(
+    title = "Under-Five Mortality Rate Trends per Country",
+    x = "Year",
+    y = "Mortality Rate",
+    color = "Country"  # Legend title
+  ) +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+# Plot for neonatal mortality rates (with legend)
+ggplot(neonatal_mortality_data, aes(x = year, y = observed_value, group = geographic_area, color = geographic_area)) +
+  geom_point() +  # Points for each country
+  geom_line(aes(group = geographic_area), alpha = 0.5) +  # Lines for each country
+  stat_summary(fun = "mean", geom = "line", aes(group = 1), linewidth = 1.5, color = "black") +  # Average trend line
+  labs(
+    title = "Neonatal Mortality Rate Trends per Country",
+    x = "Year",
+    y = "Mortality Rate",
+    color = "Country"  # Legend title
+  ) +
+  theme_minimal()
+
+
+```
+
+#
+
+Findings:
+Based on the visualizations, Somalia and South Sudan has the highest under-five mortality rate and the highest neonatal mortality rate among East African Community (EAC) countries.
+This indicates that South Sudan faces major challenges in child health, with a greater burden of deaths among both neonates and children under the age of five.
+These findings highlight the urgent need for targeted health interventions in South Sudan to improve maternal and child healthcare services, strengthen immunization programs, and expand access to quality healthcare facilities.
