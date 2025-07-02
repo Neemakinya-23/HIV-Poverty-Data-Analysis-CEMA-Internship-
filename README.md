@@ -1,4 +1,3 @@
-# -HIV-Poverty-Data-Analysis-CEMA-Internship
 # HIV & Poverty Data Analysis – CEMA Internship Task
 
 This project investigates the relationship between HIV prevalence and multidimensional poverty across Sub-Saharan African countries. It was developed as part of a task for the CEMA Internship Program, with the goal of extracting actionable insights from public health and economic data.
@@ -34,3 +33,5 @@ To identify countries contributing to over 75% of the global HIV burden, visuali
 
 ## Notes
 Though this project was not selected in the final round, it was an incredible learning experience in real-world data analysis, and demonstrates my growing expertise in data science for social impact. It was a learning curve.
+
+
